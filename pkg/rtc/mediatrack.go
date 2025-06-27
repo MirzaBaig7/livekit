@@ -133,7 +133,7 @@ func NewMediaTrack(params MediaTrackParams, ti *livekit.TrackInfo) *MediaTrack {
 				t.dynacastManager.NotifySubscriberMaxQuality(
 					subscriberID,
 					mimeType,
-					buffer.SpatialLayerToVideoQuality(layer, t.MediaTrackReceiver.TrackInfo()),
+					buffer.GetVideoQualityForSpatialLayer(layer, t.MediaTrackReceiver.TrackInfo()),
 				)
 			},
 		)
@@ -165,7 +165,7 @@ func (t *MediaTrack) OnSubscribedMaxQualityChange(
 		for _, q := range maxSubscribedQualities {
 			receiver := t.Receiver(q.CodecMime)
 			if receiver != nil {
-				receiver.SetMaxExpectedSpatialLayer(buffer.VideoQualityToSpatialLayer(q.Quality, t.MediaTrackReceiver.TrackInfo()))
+				receiver.SetMaxExpectedSpatialLayer(buffer.GetSpatialLayerForVideoQuality(q.Quality, t.MediaTrackReceiver.TrackInfo()))
 			}
 		}
 	}
@@ -263,7 +263,7 @@ func (t *MediaTrack) AddReceiver(receiver *webrtc.RTPReceiver, track sfu.TrackRe
 	t.lock.Lock()
 	var regressCodec bool
 	mimeType := mime.NormalizeMimeType(track.Codec().MimeType)
-	layer := buffer.RidToSpatialLayer(track.RID(), ti)
+	layer := buffer.GetSpatialLayerForRid(track.RID(), ti)
 	t.params.Logger.Debugw(
 		"AddReceiver",
 		"rid", track.RID(),
@@ -271,6 +271,14 @@ func (t *MediaTrack) AddReceiver(receiver *webrtc.RTPReceiver, track sfu.TrackRe
 		"ssrc", track.SSRC(),
 		"codec", track.Codec(),
 	)
+	logger.Infow(
+		"AddReceiver",
+		"rid", track.RID(),
+		"layer", layer,
+		"ssrc", track.SSRC(),
+		"codec", track.Codec(),
+		"trackInfo", logger.Proto(ti),
+	) // REMOVE
 	wr := t.MediaTrackReceiver.Receiver(mimeType)
 	if wr == nil {
 		priority := -1
@@ -308,7 +316,6 @@ func (t *MediaTrack) AddReceiver(receiver *webrtc.RTPReceiver, track sfu.TrackRe
 			sfu.WithPliThrottleConfig(t.params.PLIThrottleConfig),
 			sfu.WithAudioConfig(t.params.AudioConfig),
 			sfu.WithLoadBalanceThreshold(20),
-			sfu.WithStreamTrackers(),
 			sfu.WithForwardStats(t.params.ForwardStats),
 		)
 		newWR.OnCloseHandler(func() {
@@ -500,7 +507,6 @@ func (t *MediaTrack) Close(isExpectedToResume bool) {
 	if t.dynacastManager != nil {
 		t.dynacastManager.Close()
 	}
-	t.MediaTrackReceiver.ClearAllReceivers(isExpectedToResume)
 	t.MediaTrackReceiver.Close(isExpectedToResume)
 }
 
